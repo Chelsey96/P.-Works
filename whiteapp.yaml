@@ -1,0 +1,227 @@
+Comment: A description of my state machine
+StartAt: format events
+States:
+  format events:
+    Type: Task
+    Resource: arn:aws:states:::lambda:invoke
+    OutputPath: $.Payload
+    Parameters:
+      Payload.$: $
+      FunctionName: arn:aws:lambda:us-west-2:974833158473:function:formatevent:$LATEST
+    Retry:
+      - ErrorEquals:
+          - Lambda.ServiceException
+          - Lambda.AWSLambdaException
+          - Lambda.SdkClientException
+          - Lambda.TooManyRequestsException
+        IntervalSeconds: 1
+        MaxAttempts: 3
+        BackoffRate: 2
+    Next: Parallel
+  Parallel:
+    Type: Parallel
+    Branches:
+      - StartAt: fetch item price
+        States:
+          fetch item price:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: arn:aws:lambda:us-west-2:974833158473:function:itemprice:$LATEST
+            Retry:
+              - ErrorEquals:
+                  - Lambda.ServiceException
+                  - Lambda.AWSLambdaException
+                  - Lambda.SdkClientException
+                  - Lambda.TooManyRequestsException
+                IntervalSeconds: 1
+                MaxAttempts: 3
+                BackoffRate: 2
+            Next: fetch item price api
+          fetch item price api:
+            Type: Task
+            Resource: arn:aws:states:::apigateway:invoke
+            Parameters:
+              ApiEndpoint: MyApiId.execute-api.us-east-1.amazonaws.com
+              Method: GET
+              Headers:
+                Header1:
+                  - HeaderValue1
+                Header2:
+                  - HeaderValue2
+                  - HeaderValue3
+              Stage: MyStage
+              Path: /Item/(ID)/Price
+              QueryParameters:
+                QueryParameter1:
+                  - QueryParameterValue1
+                QueryParameter2:
+                  - QueryParameterValue2
+                  - QueryParameterValue3
+              RequestBody:
+                Payload: Hello from Step Functions!
+              AuthType: IAM_ROLE
+            End: true
+      - StartAt: fetch item availability
+        States:
+          fetch item availability:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: >-
+                arn:aws:lambda:us-west-2:974833158473:function:itemavailability:$LATEST
+            Retry:
+              - ErrorEquals:
+                  - Lambda.ServiceException
+                  - Lambda.AWSLambdaException
+                  - Lambda.SdkClientException
+                  - Lambda.TooManyRequestsException
+                IntervalSeconds: 1
+                MaxAttempts: 3
+                BackoffRate: 2
+            Next: fetch item availability api
+          fetch item availability api:
+            Type: Task
+            Resource: arn:aws:states:::apigateway:invoke
+            Parameters:
+              ApiEndpoint: MyApiId.execute-api.us-east-1.amazonaws.com
+              Method: GET
+              Headers:
+                Header1:
+                  - HeaderValue1
+                Header2:
+                  - HeaderValue2
+                  - HeaderValue3
+              Stage: MyStage
+              Path: /Item/(ID)/Availability
+              QueryParameters:
+                QueryParameter1:
+                  - QueryParameterValue1
+                QueryParameter2:
+                  - QueryParameterValue2
+                  - QueryParameterValue3
+              RequestBody:
+                Payload: Hello from Step Functions!
+              AuthType: IAM_ROLE
+            End: true
+            Catch:
+              - ErrorEquals:
+                  - 3
+            Retry:
+              - ErrorEquals:
+                  - 3
+                BackoffRate: 1.5
+                IntervalSeconds: 1
+                MaxAttempts: 3
+              - ErrorEquals:
+                  - States.Timeout
+                BackoffRate: 5
+                IntervalSeconds: 10
+                MaxAttempts: 3
+      - StartAt: fetch item describtion
+        States:
+          fetch item describtion:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              Payload.$: $
+              FunctionName: >-
+                arn:aws:lambda:us-west-2:974833158473:function:itemdescribtion:$LATEST
+            Retry:
+              - ErrorEquals:
+                  - Lambda.ServiceException
+                  - Lambda.AWSLambdaException
+                  - Lambda.SdkClientException
+                  - Lambda.TooManyRequestsException
+                IntervalSeconds: 1
+                MaxAttempts: 3
+                BackoffRate: 2
+            Next: fetch iten describtion api
+          fetch iten describtion api:
+            Type: Task
+            Resource: arn:aws:states:::apigateway:invoke
+            Parameters:
+              ApiEndpoint: MyApiId.execute-api.us-east-1.amazonaws.com
+              Method: GET
+              Headers:
+                Header1:
+                  - HeaderValue1
+                Header2:
+                  - HeaderValue2
+                  - HeaderValue3
+              Stage: MyStage
+              Path: /Item/(ID)/Describtion
+              QueryParameters:
+                QueryParameter1:
+                  - QueryParameterValue1
+                QueryParameter2:
+                  - QueryParameterValue2
+                  - QueryParameterValue3
+              RequestBody:
+                Payload: Hello from Step Functions!
+              AuthType: IAM_ROLE
+            End: true
+    Next: Merge data
+  Merge data:
+    Type: Task
+    Resource: arn:aws:states:::lambda:invoke
+    OutputPath: $.Payload
+    Parameters:
+      Payload.$: $
+      FunctionName: arn:aws:lambda:us-west-2:974833158473:function:mergedata:$LATEST
+    Retry:
+      - ErrorEquals:
+          - Lambda.ServiceException
+          - Lambda.AWSLambdaException
+          - Lambda.SdkClientException
+          - Lambda.TooManyRequestsException
+        IntervalSeconds: 1
+        MaxAttempts: 3
+        BackoffRate: 2
+    Next: DynamoDB PutItem
+  DynamoDB PutItem:
+    Type: Task
+    Resource: arn:aws:states:::dynamodb:putItem
+    Parameters:
+      TableName: MyDynamoDBTable
+      Item:
+        Column:
+          S: MyEntry
+    Retry:
+      - ErrorEquals: []
+        BackoffRate: 2
+        IntervalSeconds: 1
+        MaxAttempts: 3
+    Catch:
+      - ErrorEquals:
+          - States.ALL
+        Next: DynamoDB PutItem
+    Next: Choice
+  Choice:
+    Type: Choice
+    Choices:
+      - Next: Send success notification
+        Comment: success
+    Default: send failure notification
+  Send success notification:
+    Type: Task
+    Resource: arn:aws:states:::aws-sdk:sns:publish
+    Parameters:
+      Message.$: $
+    Next: Success
+  Success:
+    Type: Succeed
+  send failure notification:
+    Type: Task
+    Resource: arn:aws:states:::sns:publish
+    Parameters:
+      Message.$: $
+      TopicArn: ''
+    Next: Fail
+  Fail:
+    Type: Fail
